@@ -1,4 +1,4 @@
-# FourierAnalysisVisualizerTool
+# FourierAnalysisClass
 
 This python class can be used to create several different types of signals and plot the time domain and FFT signal. 
 
