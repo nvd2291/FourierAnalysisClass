@@ -1,3 +1,4 @@
+## Author: Naveed Naeem
 from matplotlib import pyplot as plt
 from scipy import signal
 from scipy.fft import fft, fftfreq
@@ -13,7 +14,7 @@ class FourierDataObject():
     
     __noise_types = ('white', 'pink', 'brown')
     __signal_types = ('sine', 'square', 'sawtooth', 'triangle')
-    __window_types = ('bartlett', 'blackman', 'blackmanharris4', 'blackmanharris7', 'boxcar', 'flatop', 'hamming', 'hanning', 'parzen', 'triangular', 'tukey')
+    __window_types = ('bartlett', 'blackman', 'blackmanharris4', 'blackmanharris7', 'boxcar', 'flattop', 'hamming', 'hanning', 'parzen', 'triangular', 'tukey')
     __sawtooth_types = {'left': 0, 'right': 1}
     name = 'FourierDataObject'
 
@@ -123,7 +124,31 @@ class FourierDataObject():
         if cls.noise_enable == True:
             cls.generate_noise_data()
             cls.signal_data += cls.noise_data
+
+    def construct_square_wave_from_sines(cls, harmonics = 7):
         
+        cls.calc_sample_period()
+        cls.calc_num_samples()
+
+        four_over_pi = 4 / np.pi
+        cls.time_axis_data = np.linspace(cls.start_time, cls.end_time, cls.num_samples)
+        sq_wave = np.zeros(len(cls.time_axis_data))
+        for n in range(1, 2 * (harmonics + 1), 2):
+
+            sq_wave += four_over_pi * ((1 / n) * np.sin( n * 2 * np.pi * cls.signal_frequency * cls.time_axis_data))
+
+        cls.signal_data = sq_wave * cls.amplitude
+
+        if cls.noise_enable == True:
+            cls.generate_noise_data()
+            cls.signal_data += cls.noise_data
+
+
+    def construct_triangle_wave_from_sines(cls, harmonics = 7):
+        cls.calc_sample_period()
+        cls.calc_num_samples()
+        print('Function is not currently implemented')
+        pass
 
 
     def generate_freq_domain_data(cls):
@@ -157,8 +182,6 @@ class FourierDataObject():
         #Compute the fft magnitude
         cls.fft_magnitude = 20 * np.log10(fft_data_one_sided)
 
-        
-
     def generate_noise_data(cls):
         
         #White noise = random uniform distribution
@@ -189,9 +212,6 @@ class FourierDataObject():
     
         print('ERROR: Unexpected Window type detected') 
 
-
-
-
     def plot_time_domain(cls):
 
         plt.figure(num=1)
@@ -215,7 +235,6 @@ class FourierDataObject():
         plt.grid(True, 'both')
         plt.show()
         
-    
     def plot_time_and_fft(cls):
         
         #Plot Time Domain Data
