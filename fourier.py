@@ -1,4 +1,10 @@
-## Author: Naveed Naeem
+'''
+Author: Naveed Naeem
+Title: fourier.py
+Purpose: Provides the capability to easily plot and display different types of
+signal types along with their corresponding FFT plots
+'''
+from multipledispatch import dispatch
 from matplotlib import pyplot as plt
 from scipy import signal
 from scipy.fft import fft, fftfreq
@@ -52,6 +58,7 @@ class FourierDataObject():
     def calc_num_samples(cls) -> int:
         cls.num_samples = floor(abs(cls.end_time - cls.start_time) / cls.sample_period)
 
+    ## Calculate the Equivalent Noise Bandwidth value based on the current window
     def equivalent_noise_bandwidth(cls, window, dB = False):
         enbw = len(window) * (np.sum(window**2)/ np.sum(window)**2)
         if not dB:
@@ -59,6 +66,7 @@ class FourierDataObject():
         else:
             return 10 * log10(enbw)
     
+    ## Calculate the Coherent Power Gain value based on the current window
     def coherent_power_gain(cls, window, dB = False):
         cpg = np.sum(window)/ len(window)
         if not dB:
@@ -66,6 +74,7 @@ class FourierDataObject():
         else:
             return 20 * log10(cpg)
 
+    
     def select_noise(cls, noise_type: str):
         noise_type = noise_type.lower()
         if noise_type not in cls.__noise_types:
@@ -93,6 +102,12 @@ class FourierDataObject():
         else:
             cls._window_type = window_type
     
+    def enable_window(cls):
+        cls.window_enable = True
+
+    def disable_window(cls):
+        cls.window_enable = False
+
     #Method to generate time domain data based on the 
     def generate_time_domain_data(cls):
 
@@ -133,7 +148,7 @@ class FourierDataObject():
         four_over_pi = 4 / np.pi
         cls.time_axis_data = np.linspace(cls.start_time, cls.end_time, cls.num_samples)
         sq_wave = np.zeros(len(cls.time_axis_data))
-        for n in range(1, 2 * (harmonics + 1), 2):
+        for n in range(1, (harmonics + 1), 2):
 
             sq_wave += four_over_pi * ((1 / n) * np.sin( n * 2 * np.pi * cls.signal_frequency * cls.time_axis_data))
 
@@ -147,9 +162,20 @@ class FourierDataObject():
     def construct_triangle_wave_from_sines(cls, harmonics = 7):
         cls.calc_sample_period()
         cls.calc_num_samples()
-        print('Function is not currently implemented')
-        pass
+        pi_squared = np.pi ** 2
 
+        cls.time_axis_data = np.linspace(cls.start_time, cls.end_time, cls.num_samples)
+        triangle_wave = np.zeros(len(cls.time_axis_data))
+
+        # Only sum odd number of harmonics
+        for n in range(1, (harmonics + 1), 2):
+            triangle_wave += (8 / pi_squared) * ((-1) ** ((n - 1)/ 2)) * (1 / (n ** 2)) * np.sin(2 * np.pi * cls.signal_frequency * cls.time_axis_data * n)
+
+        cls.signal_data = triangle_wave * cls.amplitude
+        
+        if cls.noise_enable == True:
+            cls.generate_noise_data()
+            cls.signal_data += cls.noise_data
 
     def generate_freq_domain_data(cls):
 
@@ -182,19 +208,24 @@ class FourierDataObject():
         #Compute the fft magnitude
         cls.fft_magnitude = 20 * np.log10(fft_data_one_sided)
 
-    def generate_noise_data(cls):
-        
+    def generate_noise_data(cls, noise_type = ""):
+
+        if noise_type != "":
+            cls.__noise_types = noise_type
+        else:
+            cls.__noise_types = 'white'
         #White noise = random uniform distribution
-        if cls._noise_type == 'white':
+        if cls.__noise_types == 'white':
             cls.noise_data = np.random.uniform(size = len(cls.signal_data)) * cls.max_noise
 
-        elif cls._noise_type == 'brown':
+        elif cls.__noise_types == 'brown':
             cls.noise_data = np.cumsum(np.random.uniform(size = len(cls.signal_data)))/ cls.num_samples * cls.max_noise
 
-        elif cls._noise_type == 'pink':
+        elif cls._noise_types == 'pink':
             pass
         else:
             print('ERROR: Unexpected Noise type detected') 
+
 
     def fft_window_data(cls):
             
