@@ -10,193 +10,296 @@ from scipy import signal
 from scipy.fft import fft, fftfreq
 from math import floor, log10, sqrt
 from blackmanharris7 import blackmanharris7
+from typing import Optional
 
 import pandas as pd
 import numpy as np
 import random
 
 class FourierDataObject():
-    """The FourierDataObject Class is used to generate time and frequency domain data based on user inputs"""
+    """
+    The FourierDataObject Class is used to generate time and frequency domain data based on user inputs
+    
+    If a FourierDataObject is created without specifying any values then the following are the defaults:
+
+    Signal Type: Sine Wave
+    Signal Frequency: 1kHz
+    Sampling Frequency: 1MHz
+    Amplitude (Unitless): 1
+    Duty Cycle: 50%
+    DC Offset (Unitless): 0
+    FFT Window: Rectangular(Flat-top)
+
+    Noise: Disabled
+    Windowing: Disabled
+    """
     
     __noise_types = ('white', 'pink', 'brown')
     __signal_types = ('sine', 'square', 'sawtooth', 'triangle')
     __window_types = ('bartlett', 'blackman', 'blackmanharris4', 'blackmanharris7', 'boxcar', 'flattop', 'hamming', 'hanning', 'parzen', 'triangular', 'tukey')
     __sawtooth_types = {'left': 0, 'right': 1}
-    name = 'FourierDataObject'
+    __name = 'FourierDataObject'
 
     def __init__(self, signal_frequency = 1e3, sample_frequency= 1e6, amplitude = 1.0, duty_cycle = 0.5, dc_offset = 0.0):
 
         #Default Values
-        self.time_axis_data = []
-        self.signal_data = []
-        self._signal_type =  self.__signal_types[0]
-        self._noise_type = self.__noise_types[0]
-        self._window_type = self.__window_types[0]
-        self.start_time = 0.0
-        self.end_time = 0.10
-        self.max_noise = 0.1
-        self.window_enable = False
-        self.noise_enable = False
-        self.sample_frequency = sample_frequency 
-        self.signal_frequency = signal_frequency
-        self.sawtooth_type = self.__sawtooth_types['left']
-
-
+        self.__time_axis_data = []
+        self.__signal_data = []
+        # self.__input_data = []
+        self.__curr_sig_type =  self.__signal_types[0]
+        self.__curr_noise_type = self.__noise_types[0]
+        self.__curr_window_type = self.__window_types[4]
+        self.__start_time = 0.0
+        self.__end_time = 0.10
+        self.__amplitude = amplitude
+        self.__dc_offset = dc_offset
+        self.__duty_cycle = duty_cycle
+        self.__max_noise = 0.1
+        self.__noise_enable = False
+        self.__window_enable = False
+        self.__sample_frequency = sample_frequency 
+        self.__signal_frequency = signal_frequency
+        self.__sawtooth_type = self.__sawtooth_types['left']
+        self.__sample_period = 1        
+        self.__num_samples = 32768
+        self.__enbw = 1
+        self.__cpg = 0
         #Values calculated based on initialized values
         self.calc_sample_period()
         self.calc_num_samples()
-        self.amplitude = amplitude
-        self.dc_offset = dc_offset
-        self.duty_cycle = duty_cycle
+
   
     def __repr__(cls) -> str:
-        return cls.name
+        return cls.__name
 
     def calc_sample_period(cls):
-        cls.sample_period = 1.0 / cls.sample_frequency
+        """ Calculates the sample period based on the sampling frequency """
+        cls.__sample_period = 1.0 / cls.__sample_frequency
 
-    def calc_num_samples(cls) -> int:
-        cls.num_samples = floor(abs(cls.end_time - cls.start_time) / cls.sample_period)
+    def calc_num_samples(cls):
+        """
+        Calculates an integer number of samples based on the current start time, end time, and sampled period
+        """
+        cls.__num_samples = floor(abs(cls.__end_time - cls.__start_time) / cls.__sample_period)
 
-    ## Calculate the Equivalent Noise Bandwidth value based on the current window
+    def set_time(cls, start_time: int, stop_time: int):
+        """
+        Sets the start and stop time of the signal in seconds
+        """
+        cls.__start_time = start_time
+        cls.__end_time =  stop_time
+
     def equivalent_noise_bandwidth(cls, window, dB = False):
-        enbw = len(window) * (np.sum(window**2)/ np.sum(window)**2)
-        if not dB:
-            return enbw
+        enbw = len(window) * (np.sum(window ** 2)/ np.sum(window) ** 2)
+        if dB:
+            cls.__enbw = enbw
         else:
-            return 10 * log10(enbw)
+            cls.__enbw = 10 * log10(enbw)
     
     ## Calculate the Coherent Power Gain value based on the current window
     def coherent_power_gain(cls, window, dB = False):
         cpg = np.sum(window)/ len(window)
         if not dB:
-            return cpg
+            cls.__cpg = cpg
         else:
-            return 20 * log10(cpg)
-
+            cls.__cpg = 20 * log10(cpg)
     
-    def select_noise(cls, noise_type: str):
+    def set_noise_type(cls, noise_type: str, noise_magnitude: Optional[float] = None):
         noise_type = noise_type.lower()
         if noise_type not in cls.__noise_types:
             print('ERROR: Unexpected Input')
             print(f"The following are noise types are accepted inputs: {cls.__noise_types}")
         else:
-            cls._noise_type = noise_type
+            if noise_magnitude is not None:
+                cls.__max_noise = noise_magnitude
+            cls.__curr_noise_type = noise_type
+            cls.generate_noise_data()
 
-    
-    def select_signal(cls, signal_type: str, sawtooth_type = 'left'):
+    def set_signal_type(cls, signal_type: str, sawtooth_type = 'left'):
         signal_type = signal_type.lower()
         if signal_type not in cls.__signal_types:
             print('ERROR: Unexpected Input')
             print(f"The following are signal types are accepted inputs: {cls.__signal_types}")
         else:
-            cls._signal_type = signal_type
-            if cls._signal_type == cls.__signal_types[2]:
-                cls.sawtooth_type = cls.__sawtooth_types[sawtooth_type]
+            cls.__curr_sig_type = signal_type
+            if cls.__curr_sig_type == cls.__signal_types[2]:
+                cls.__sawtooth_type = cls.__sawtooth_types[sawtooth_type]
 
-    def select_window(cls, window_type: str):
+    def set_window_type(cls, window_type: str):
         window_type = window_type.lower()
         if window_type not in cls.__window_types:
             print('ERROR: Unexpected Input')
             print(f"The following are FFT windows are accepted inputs: {cls.__window_types}")
         else:
-            cls._window_type = window_type
+            cls.__curr_window_type = window_type
+            cls.fft_window_data()
     
     def enable_window(cls):
-        cls.window_enable = True
+        cls.__window_enable = True
 
     def disable_window(cls):
-        cls.window_enable = False
+        cls.__window_enable = False
 
-    #Method to generate time domain data based on the 
-    def generate_time_domain_data(cls):
+    def enable_noise(cls):
+        cls.__noise_enable = True
 
+    def disable_noise(cls):
+        cls.__noise_enable  = False
+
+    def set_amplitude(cls, amplitude: float):
+        if cls.__signal_data is None:
+            cls.__amplitude = amplitude
+        else:
+            cls.__signal_data /= cls.__amplitude
+            cls.__amplitude = amplitude
+            cls.__signal_data *= amplitude
+
+    def set_offset(cls, offset: float):
+        if cls.__signal_data is None:
+            cls.__dc_offset = offset
+        else:
+            cls.__signal_data -= cls.__dc_offset
+            cls.__dc_offset = offset
+            cls.__signal_data += offset
+
+    def generate_time_domain_data(cls, signal_type: Optional[str] = None):
         """
         This method will generate the time domain data base on the current signal configuration
         """
+        if signal_type is not None:
+            cls.set_signal_type(signal_type)
+
         cls.calc_sample_period()
         cls.calc_num_samples()
 
-        cls.time_axis_data = np.linspace(cls.start_time, cls.end_time, cls.num_samples)
+        cls.__time_axis_data = np.linspace(cls.__start_time, cls.__end_time, cls.__num_samples)
 
-        if cls._signal_type == 'sine':
-            yAxis = np.sin(2 * np.pi * cls.signal_frequency * cls.time_axis_data)
-            cls.signal_data = yAxis * cls.amplitude + cls.dc_offset
+        if cls.__curr_sig_type == 'sine':
+            yAxis = np.sin(2 * np.pi * cls.__signal_frequency * cls.__time_axis_data)
+            cls.__signal_data = yAxis * cls.__amplitude + cls.__dc_offset
     
-        elif cls._signal_type =='square' :
-            yAxis = signal.square(2 * np.pi * cls.signal_frequency * cls.time_axis_data, cls.duty_cycle)
-            cls.signal_data = yAxis * cls.amplitude + cls.dc_offset
+        elif cls.__curr_sig_type =='square' :
+            yAxis = signal.square(2 * np.pi * cls.__signal_frequency * cls.__time_axis_data, cls.__duty_cycle)
+            cls.__signal_data = yAxis * cls.__amplitude + cls.__dc_offset
 
-        elif cls._signal_type == 'sawtooth':
+        elif cls.__curr_sig_type == 'sawtooth':
+            yAxis = signal.sawtooth(2 * np.pi * cls.__signal_frequency * cls.__time_axis_data, cls.__sawtooth_type)
+            cls.__signal_data = yAxis * cls.__amplitude + cls.__dc_offset
+
+        elif cls.__curr_sig_type == 'triangle':
+            yAxis = signal.sawtooth(2 * np.pi * cls.__signal_frequency * cls.__time_axis_data, cls.__duty_cycle)
+            cls.__signal_data = yAxis * cls.__amplitude + cls.__dc_offset
             
-            yAxis = signal.sawtooth(2 * np.pi * cls.signal_frequency * cls.time_axis_data, cls.sawtooth_type)
-            cls.signal_data = yAxis * cls.amplitude + cls.dc_offset
-
-        elif cls._signal_type == 'triangle':
-            yAxis = signal.sawtooth(2 * np.pi * cls.signal_frequency * cls.time_axis_data, cls.duty_cycle)
-            cls.signal_data = yAxis * cls.amplitude + cls.dc_offset
-    
-        if cls.noise_enable == True:
+        if cls.__noise_enable == True:
             cls.generate_noise_data()
-            cls.signal_data += cls.noise_data
+            cls.__signal_data += cls.noise_data
 
-    def construct_square_wave_from_sines(cls, harmonics = 7):
+    def construct_square_wave_from_sines(cls, 
+                                        harmonics = 7, 
+                                        amplitude: Optional[float] = None, 
+                                        frequency: Optional[float] = None, 
+                                        with_noise: Optional[bool] = None,
+                                        noise_magnitude: Optional[float] = None):
         
+        if amplitude is not None:
+            cls.__amplitude = amplitude
+        if frequency is not None:
+            cls.__signal_frequency = frequency
+        if noise_magnitude is not None:
+            cls.__max_noise = noise_magnitude
+        if with_noise is not None:
+            cls.__noise_enable = with_noise
+            if with_noise:
+                cls.generate_noise_data()
         cls.calc_sample_period()
         cls.calc_num_samples()
 
         four_over_pi = 4 / np.pi
-        cls.time_axis_data = np.linspace(cls.start_time, cls.end_time, cls.num_samples)
-        sq_wave = np.zeros(len(cls.time_axis_data))
-        for n in range(1, (harmonics + 1), 2):
+        cls.__time_axis_data = np.linspace(cls.__start_time, 
+                                           cls.__end_time, 
+                                           cls.__num_samples)
 
-            sq_wave += four_over_pi * ((1 / n) * np.sin( n * 2 * np.pi * cls.signal_frequency * cls.time_axis_data))
+        sq_wave = np.zeros(len(cls.__time_axis_data))
+        for n in range(1, (harmonics * 2 + 1), 2):
 
-        cls.signal_data = sq_wave * cls.amplitude
+            sq_wave += (four_over_pi * ((1 / n) * 
+                        np.sin( n * 2 * np.pi * 
+                        cls.__signal_frequency * 
+                        cls.__time_axis_data)))
 
-        if cls.noise_enable == True:
+        cls.__signal_data = sq_wave * cls.__amplitude
+
+        cls.__signal_data += cls.__dc_offset
+        
+        if cls.__noise_enable == True:
             cls.generate_noise_data()
-            cls.signal_data += cls.noise_data
+            cls.__signal_data += cls.noise_data
 
 
-    def construct_triangle_wave_from_sines(cls, harmonics = 7):
+    def construct_triangle_wave_from_sines(cls, 
+                                           harmonics = 7, 
+                                           amplitude: Optional[float] = None, 
+                                           frequency: Optional[float] = None, 
+                                           with_noise: Optional[bool] = None,
+                                           noise_magnitude: Optional[float] = None):
+        
+        if amplitude is not None:
+            cls.__amplitude = amplitude
+        if frequency is not None:
+            cls.__signal_frequency = frequency
+        if noise_magnitude is not None:
+            cls.__max_noise = noise_magnitude
+        if with_noise is not None:
+            cls.__noise_enable = with_noise
+            if with_noise:
+                cls.generate_noise_data()
+
         cls.calc_sample_period()
         cls.calc_num_samples()
-        pi_squared = np.pi ** 2
+        pi_squared_div_8 = (np.pi ** 2) / 8 
 
-        cls.time_axis_data = np.linspace(cls.start_time, cls.end_time, cls.num_samples)
-        triangle_wave = np.zeros(len(cls.time_axis_data))
+        cls.__time_axis_data = np.linspace(cls.__start_time, cls.__end_time, cls.__num_samples)
+        triangle_wave = np.zeros(len(cls.__time_axis_data))
 
         # Only sum odd number of harmonics
-        for n in range(1, (harmonics + 1), 2):
-            triangle_wave += (8 / pi_squared) * ((-1) ** ((n - 1)/ 2)) * (1 / (n ** 2)) * np.sin(2 * np.pi * cls.signal_frequency * cls.time_axis_data * n)
+        for n in range(1, (harmonics * 2 + 1), 2):
+            triangle_wave += (pi_squared_div_8 * ((-1) ** ((n - 1)/ 2)) * 
+                              (1 / (n ** 2)) * 
+                              np.sin(2 * np.pi * 
+                              cls.__signal_frequency * 
+                              cls.__time_axis_data * n))
 
-        cls.signal_data = triangle_wave * cls.amplitude
+        cls.__signal_data = triangle_wave * cls.__amplitude
         
-        if cls.noise_enable == True:
-            cls.generate_noise_data()
-            cls.signal_data += cls.noise_data
+        cls.__signal_data += cls.__dc_offset
 
-    def generate_freq_domain_data(cls):
+        if cls.__noise_enable:
+            cls.generate_noise_data()
+            cls.__signal_data += cls.noise_data
+
+    def generate_freq_domain_data(cls, is_windowed: Optional[bool] = None):
 
         # Calculate the size of the frequency bins
-        cls.fft_bin_size = (cls.sample_frequency/cls.num_samples)
-        
-        if cls.window_enable == True:
-            window_data = cls.fft_window_data()
-            enbw = cls.equivalent_noise_bandwidth(window_data)
-            cpg = cls.coherent_power_gain(window_data)
-            scaling_factor = 1/(cpg / sqrt(enbw))
+        cls.fft_bin_size = (cls.__sample_frequency/cls.__num_samples)
 
-            windowed_signal = window_data * cls.signal_data
-            fft_data = np.absolute(fft(windowed_signal)/cls.num_samples) * scaling_factor
+        if is_windowed is not None:
+            cls.__window_enable = is_windowed
+
+        if cls.__window_enable:
+            window_data = cls.fft_window_data()
+            cls.equivalent_noise_bandwidth(window_data)
+            cls.coherent_power_gain(window_data)
+            scaling_factor = 1/(cls.__cpg / sqrt(cls.__enbw))
+
+            windowed_signal = window_data * cls.__signal_data
+            fft_data = np.absolute(fft(windowed_signal)/cls.__num_samples) * scaling_factor
 
         else:
         # Two-Sided FFT data
-            fft_data = fft(cls.signal_data)/cls.num_samples
+            fft_data = fft(cls.__signal_data)/cls.__num_samples
 
         # Converted Two-Sided FFT to One-Sided
-        one_sided_sample_limit = (cls.num_samples)//2
+        one_sided_sample_limit = (cls.__num_samples)//2
         fft_data_one_sided = (fft_data[0:one_sided_sample_limit]) * 2
 
         #Remove DC Bin
@@ -208,20 +311,21 @@ class FourierDataObject():
         #Compute the fft magnitude
         cls.fft_magnitude = 20 * np.log10(fft_data_one_sided)
 
-    def generate_noise_data(cls, noise_type = ""):
+    def generate_noise_data(cls, noise_type: Optional[str] = None, noise_magnitude: Optional[float] = None):
 
-        if noise_type != "":
-            cls.__noise_types = noise_type
-        else:
-            cls.__noise_types = 'white'
+        if noise_type is not None:
+            cls.set_noise_type(noise_type)
+        if noise_magnitude is not None:
+            cls.__max_noise = noise_magnitude
+
         #White noise = random uniform distribution
-        if cls.__noise_types == 'white':
-            cls.noise_data = np.random.uniform(size = len(cls.signal_data)) * cls.max_noise
+        if cls.__curr_noise_type == 'white':
+            cls.noise_data = np.random.uniform(size = len(cls.__signal_data)) * cls.__max_noise
 
-        elif cls.__noise_types == 'brown':
-            cls.noise_data = np.cumsum(np.random.uniform(size = len(cls.signal_data)))/ cls.num_samples * cls.max_noise
+        elif cls.__curr_noise_type == 'brown':
+            cls.noise_data = np.cumsum(np.random.uniform(size = len(cls.__signal_data)))/ cls.__num_samples * cls.__max_noise
 
-        elif cls._noise_types == 'pink':
+        elif cls.__curr_noise_type == 'pink':
             pass
         else:
             print('ERROR: Unexpected Noise type detected') 
@@ -229,27 +333,27 @@ class FourierDataObject():
 
     def fft_window_data(cls):
             
-        if cls._window_type == 'blackmanharris4':
-            return signal.get_window('blackmanharris', cls.num_samples)
+        if cls.__curr_window_type == 'blackmanharris4':
+            return signal.get_window('blackmanharris', cls.__num_samples)
 
-        elif cls._window_type == 'blackmanharris7':
-            return blackmanharris7(cls.num_samples)
+        elif cls.__curr_window_type == 'blackmanharris7':
+            return blackmanharris7(cls.__num_samples)
         
-        elif cls._window_type == 'hanning':
-            return signal.get_window('hann', cls.num_samples)
+        elif cls.__curr_window_type == 'hanning':
+            return signal.get_window('hann', cls.__num_samples)
 
         else:
-            return signal.get_window(cls._window_type, cls.num_samples)
+            return signal.get_window(cls.__curr_window_type, cls.__num_samples)
     
         print('ERROR: Unexpected Window type detected') 
 
     def plot_time_domain(cls):
 
-        plt.figure(num=1)
-        cls.amplitude = abs(max(cls.signal_data) - min(cls.signal_data))
-        plt.plot(cls.time_axis_data, cls.signal_data)
-        plt.title(f"Time Domain Data: Frequency: {cls.signal_frequency}Hz, Sampling Frequency: {cls.sample_frequency}Hz, Amplitude: {cls.amplitude}")
-        plt.xlim(min(cls.time_axis_data), max(cls.time_axis_data))
+        plt.figure()
+        cls.__amplitude = abs(max(cls.__signal_data) - min(cls.__signal_data))
+        plt.plot(cls.__time_axis_data, cls.__signal_data)
+        plt.title(f"Time Domain Data: Frequency: {cls.__signal_frequency}Hz, Sampling Frequency: {cls.__sample_frequency}Hz, Amplitude: {cls.__amplitude}")
+        plt.xlim(min(cls.__time_axis_data), max(cls.__time_axis_data))
         plt.ylabel('Units')
         plt.xlabel('Seconds')
         plt.grid(True, 'both')
@@ -257,9 +361,9 @@ class FourierDataObject():
 
     def plot_fft(cls):
 
-        plt.figure(num=2)
+        plt.figure()
         plt.semilogx(cls.fft_bins, cls.fft_magnitude)
-        plt.title(f"FFT Plot: Frequency: {cls.signal_frequency}Hz, Sampling Frequency: {cls.sample_frequency}Hz, FFT Window: {cls._window_type.capitalize()}")
+        plt.title(f"FFT Plot: Frequency: {cls.__signal_frequency}Hz, Sampling Frequency: {cls.__sample_frequency}Hz, FFT Window: {cls.__curr_noise_type.capitalize()}")
         plt.xlim(min(cls.fft_bins), max(cls.fft_bins))
         plt.ylabel('Magnitude [dBFS]')
         plt.xlabel('Frequency [Hz]')
@@ -269,12 +373,12 @@ class FourierDataObject():
     def plot_time_and_fft(cls):
         
         #Plot Time Domain Data
-        plt.figure(num=1)
-        cls.amplitude = abs(max(cls.signal_data) - min(cls.signal_data))
+        plt.figure()
+        cls.__amplitude = abs(max(cls.__signal_data) - min(cls.__signal_data))
         plt.subplot(2,1,1)
-        plt.plot(cls.time_axis_data, cls.signal_data)
-        plt.title(f"Time Domain Data: Frequency: {cls.signal_frequency}Hz, Sampling Frequency: {cls.sample_frequency}Hz, Amplitude: {cls.amplitude}")
-        plt.xlim(min(cls.time_axis_data), max(cls.time_axis_data))
+        plt.plot(cls.__time_axis_data, cls.__signal_data)
+        plt.title(f"Time Domain Data: Frequency: {cls.__signal_frequency}Hz, Sampling Frequency: {cls.__sample_frequency}Hz, Amplitude: {cls.__amplitude}")
+        plt.xlim(min(cls.__time_axis_data), max(cls.__time_axis_data))
         plt.ylabel('Units')
         plt.xlabel('Seconds')
         plt.grid(True, 'both')
@@ -282,10 +386,10 @@ class FourierDataObject():
         #Plot Frequency Domain Data
         plt.subplot(2,1,2)
         plt.semilogx(cls.fft_bins, cls.fft_magnitude)
-        if cls.window_enable:
-            plt.title(f"FFT Plot: Frequency: {cls.signal_frequency}Hz, Sampling Frequency: {cls.sample_frequency}Hz, FFT Window: {cls._window_type.capitalize()}")
+        if cls.__window_enable:
+            plt.title(f"FFT Plot: Frequency: {cls.__signal_frequency}Hz, Sampling Frequency: {cls.__sample_frequency}Hz, FFT Window: {cls.__curr_noise_type.capitalize()}")
         else:
-            plt.title(f"FFT Plot: Frequency: {cls.signal_frequency}Hz, Sampling Frequency: {cls.sample_frequency}Hz, FFT Window: No Window")
+            plt.title(f"FFT Plot: Frequency: {cls.__signal_frequency}Hz, Sampling Frequency: {cls.__sample_frequency}Hz, FFT Window: No Window")
         plt.xlim(min(cls.fft_bins), max(cls.fft_bins))
         plt.ylabel('Magnitude [dBFS]')
         plt.xlabel('Frequency [Hz]')

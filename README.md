@@ -35,4 +35,8 @@ Other Functionality:
 - DC Offset Adjustment
 - Noise Amplitude Adjustment
 - Time Domain and FFT Plotting
-- Square Wave Generation from Sine Waves
+- Square Wave and Triangle Wave Generation from Sine Waves
+
+References:
+- https://mathworld.wolfram.com/FourierSeriesTriangleWave.html
+- https://en.wikipedia.org/wiki/Triangle_wave
