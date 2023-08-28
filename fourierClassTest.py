@@ -1,14 +1,9 @@
 from fourier import FourierDataObject
 
 fourierObject = FourierDataObject()
+fourierObject.set_time(0.001, 0.005)
+fourierObject.construct_square_wave_from_sines(5,1.0, 20.0e3, True, 0.005)
 
-print(fourierObject)
-fourierObject.select_signal('sine')
-fourierObject.signal_frequency = 1000
-fourierObject.sample_frequency = 2500000
-fourierObject.end_time = 0.01
-fourierObject.generate_time_domain_data()
 fourierObject.generate_freq_domain_data()
 
-# fourierObject.plot_time_domain()
-fourierObject.plot_fft()
+fourierObject.plot_time_and_fft()
