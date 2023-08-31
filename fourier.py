@@ -45,6 +45,9 @@ class FourierDataObject():
         #Default Values
         self.__time_axis_data = []
         self.__signal_data = []
+        self.__fft_data_raw = []
+        self.__fft_magnitude = []
+        self.__fft_bins = []
         # self.__input_data = []
         self.__curr_sig_type =  self.__signal_types[0]
         self.__curr_noise_type = self.__noise_types[0]
@@ -71,6 +74,12 @@ class FourierDataObject():
   
     def __repr__(cls) -> str:
         return cls.__name
+
+    def get_window_types(cls):
+        return cls.__window_types
+
+    def get_noise_types(cls):
+        return cls.__noise_types
 
     def calc_sample_period(cls):
         """ Calculates the sample period based on the sampling frequency """
@@ -306,10 +315,10 @@ class FourierDataObject():
         fft_data_one_sided = np.delete(fft_data_one_sided, 0)
 
         #Generate the FFT Frequency Bins
-        cls.fft_bins = np.arange(1, one_sided_sample_limit) * cls.fft_bin_size
+        cls.__fft_bins = np.arange(1, one_sided_sample_limit) * cls.fft_bin_size
 
         #Compute the fft magnitude
-        cls.fft_magnitude = 20 * np.log10(fft_data_one_sided)
+        cls.__fft_magnitude = 20 * np.log10(fft_data_one_sided)
 
     def generate_noise_data(cls, noise_type: Optional[str] = None, noise_magnitude: Optional[float] = None):
 
@@ -347,6 +356,12 @@ class FourierDataObject():
     
         print('ERROR: Unexpected Window type detected') 
 
+    def get_time_domain_data(cls):
+        return [cls.__time_axis_data, cls.__signal_data]
+
+    def get_fft_domain_data(cls):
+        return [cls.__fft_bins, cls.__fft_magnitude]
+        
     def plot_time_domain(cls):
 
         plt.figure()
@@ -362,9 +377,9 @@ class FourierDataObject():
     def plot_fft(cls):
 
         plt.figure()
-        plt.semilogx(cls.fft_bins, cls.fft_magnitude)
+        plt.semilogx(cls.__fft_bins, cls.__fft_magnitude)
         plt.title(f"FFT Plot: Frequency: {cls.__signal_frequency}Hz, Sampling Frequency: {cls.__sample_frequency}Hz, FFT Window: {cls.__curr_noise_type.capitalize()}")
-        plt.xlim(min(cls.fft_bins), max(cls.fft_bins))
+        plt.xlim(min(cls.__fft_bins), max(cls.__fft_bins))
         plt.ylabel('Magnitude [dBFS]')
         plt.xlabel('Frequency [Hz]')
         plt.grid(True, 'both')
@@ -385,12 +400,12 @@ class FourierDataObject():
 
         #Plot Frequency Domain Data
         plt.subplot(2,1,2)
-        plt.semilogx(cls.fft_bins, cls.fft_magnitude)
+        plt.semilogx(cls.__fft_bins, cls.__fft_magnitude)
         if cls.__window_enable:
             plt.title(f"FFT Plot: Frequency: {cls.__signal_frequency}Hz, Sampling Frequency: {cls.__sample_frequency}Hz, FFT Window: {cls.__curr_noise_type.capitalize()}")
         else:
             plt.title(f"FFT Plot: Frequency: {cls.__signal_frequency}Hz, Sampling Frequency: {cls.__sample_frequency}Hz, FFT Window: No Window")
-        plt.xlim(min(cls.fft_bins), max(cls.fft_bins))
+        plt.xlim(min(cls.__fft_bins), max(cls.__fft_bins))
         plt.ylabel('Magnitude [dBFS]')
         plt.xlabel('Frequency [Hz]')
         plt.grid(True, 'both')
