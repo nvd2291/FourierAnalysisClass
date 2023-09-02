@@ -98,15 +98,19 @@ class FourierDataObject():
         cls.__start_time = start_time
         cls.__end_time =  stop_time
 
-    def equivalent_noise_bandwidth(cls, window, dB = False):
+    def equivalent_noise_bandwidth(cls, window = None, dB = False):
+        if window is None:
+            window = cls.__window_data
         enbw = len(window) * (np.sum(window ** 2)/ np.sum(window) ** 2)
-        if dB:
+        if not dB:
             cls.__enbw = enbw
         else:
             cls.__enbw = 10 * log10(enbw)
     
     ## Calculate the Coherent Power Gain value based on the current window
-    def coherent_power_gain(cls, window, dB = False):
+    def coherent_power_gain(cls, window = None, dB = False):
+        if window is None:
+            window = cls.__window_data
         cpg = np.sum(window)/ len(window)
         if not dB:
             cls.__cpg = cpg
@@ -240,9 +244,7 @@ class FourierDataObject():
                         cls.__signal_frequency * 
                         cls.__time_axis_data)))
 
-        cls.__signal_data = sq_wave * cls.__amplitude
-
-        cls.__signal_data += cls.__dc_offset
+        cls.__signal_data = (sq_wave * cls.__amplitude) + cls.__dc_offset
         
         if cls.__noise_enable == True:
             cls.generate_noise_data()
@@ -265,7 +267,6 @@ class FourierDataObject():
         if with_noise is not None:
             cls.__noise_enable = with_noise
 
-        print(f"Amplitude inside fourier.py is {cls.__amplitude}")
         cls.calc_sample_period()
         cls.calc_num_samples()
         cls.generate_time_axis()
@@ -299,6 +300,9 @@ class FourierDataObject():
         elif cls.__curr_window_type == 'hanning':
             return signal.get_window('hann', cls.__num_samples)
 
+        elif cls.__curr_window_type == 'triangular':
+            return signal.get_window('triang', cls.__num_samples)
+
         else:
             return signal.get_window(cls.__curr_window_type, cls.__num_samples)
     
@@ -313,12 +317,12 @@ class FourierDataObject():
             cls.__window_enable = is_windowed
 
         if cls.__window_enable:
-            window_data = cls.fft_window_data()
-            cls.equivalent_noise_bandwidth(window_data)
-            cls.coherent_power_gain(window_data)
+            cls.__window_data = cls.fft_window_data()
+            cls.equivalent_noise_bandwidth()
+            cls.coherent_power_gain()
             scaling_factor = 1/(cls.__cpg / sqrt(cls.__enbw))
 
-            windowed_signal = window_data * cls.__signal_data
+            windowed_signal = cls.__window_data * cls.__signal_data
             fft_data = np.absolute(fft(windowed_signal)/cls.__num_samples) * scaling_factor
 
         else:
