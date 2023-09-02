@@ -40,3 +40,5 @@ Other Functionality:
 References:
 - https://mathworld.wolfram.com/FourierSeriesTriangleWave.html
 - https://en.wikipedia.org/wiki/Triangle_wave
+- https://handwiki.org/wiki/Triangle_wave#:~:text=and%20sawtooth%20waveforms-,Definition,of%20a%20shifted%20sawtooth%20wave.
+
