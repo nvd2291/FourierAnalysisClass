@@ -1,7 +1,10 @@
 import numpy as np
 
-def blackmanharris7(N: int):
-
+def blackmanharris7(N: int) -> np.ndarray[float]:
+    """
+    Generates a 7th order Blackam-Harris Window given the length
+    of the current signal. Returns a numpy array containing the window data
+    """
     a_coeffs = [0.27105140069342, 
     -0.43329793923448, 
     0.21812299954311, 
