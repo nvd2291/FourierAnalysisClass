@@ -289,6 +289,9 @@ class Fourier():
         if freq > 0:
             self.__sig_freq = freq
     
+    def set_fs(self, fs):
+        self.__fs = abs(fs)
+
     def generate_time_axis(self):
         """
         Generates the time axis vector based on the start time, end time, and
@@ -358,7 +361,7 @@ class Fourier():
         if freq is not None:
             self.__sig_freq = freq
         if fs is not None:
-            self.__sampling_freq = fs
+            self.__fs = fs
         if noise_mag is not None:
             self.__max_noise = noise_mag
         if with_noise is not None:
@@ -662,8 +665,8 @@ class Fourier():
         plt.tight_layout()
         plt.show()
 
-def export_to_file(self, filename: str, filetype: str, data_type: str):
-    pass
+    def export_to_file(self, filename: str, filetype: str, data_type: str):
+        pass
 
-def import_from_file(self, filename: str):
-    pass
+    def import_from_file(self, filename: str):
+        pass
